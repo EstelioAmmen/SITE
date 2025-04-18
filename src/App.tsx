@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Stamp as Steam, X, ChevronDown, Download, ArrowUpDown, ShoppingCart, Check, Minus, Copy } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Stamp as Steam, X, ChevronDown, Download, ArrowUpDown, ShoppingCart, Check, Minus, Copy, LogOut, Loader2 } from 'lucide-react';
 
 type Currency = {
   label: string;
@@ -21,6 +21,47 @@ type InventoryItem = {
   inCart: boolean;
 };
 
+type User = {
+  steamid: string;
+  name: string;
+  avatar: string;
+} | null;
+
+type Game = {
+  id: number;
+  name: string;
+  image: string;
+};
+
+type LoadingStep = {
+  status: 'pending' | 'loading' | 'success' | 'error';
+  message: string;
+  errorMessage?: string;
+};
+
+const games: Game[] = [
+  {
+    id: 730,
+    name: 'CS2',
+    image: 'https://cdn.cloudflare.steamstatic.com/apps/csgo/images/csgo_react/global/logo_cs2.svg'
+  },
+  {
+    id: 570,
+    name: 'Dota 2',
+    image: 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/global/dota2_logo_horiz.png'
+  },
+  {
+    id: 252490,
+    name: 'Rust',
+    image: 'https://rust.facepunch.com/img/double-logo.png'
+  },
+  {
+    id: 440,
+    name: 'TF2',
+    image: 'https://wiki.teamfortress.com/w/images/thumb/e/e6/Team_Fortress_2_Logo.svg/1200px-Team_Fortress_2_Logo.svg.png'
+  }
+];
+
 const currencies: Currency[] = [
   { label: 'Рубль', symbol: '₽' },
   { label: 'Доллар', symbol: '$' },
@@ -30,194 +71,159 @@ const currencies: Currency[] = [
   { label: 'Бел. рубль', symbol: 'Br' },
 ];
 
-const sourceOptions: FilterOption[] = [
-  { label: 'Steam', value: 'steam' },
-  { label: 'Buff163', value: 'buff163' },
-  { label: 'TM Market', value: 'tm_market' },
-];
-
-const tradabilityOptions: FilterOption[] = [
-  { label: 'Все', value: 'all' },
-  { label: 'Трейд', value: 'trade' },
-  { label: 'Продажа', value: 'sale' },
-];
-
-const categoryOptions: FilterOption[] = [
-  { label: 'Все', value: 'all' },
-  { label: 'Ножи', value: 'knives' },
-  { label: 'Перчатки', value: 'gloves' },
-  { label: 'Пистолеты', value: 'pistols' },
-];
-
-const viewModeOptions: FilterOption[] = [
-  { label: 'Одиночный', value: 'single' },
-  { label: 'Группировать', value: 'grouped' },
-];
-
-const sampleItems: InventoryItem[] = Array.from({ length: 12 }, (_, i) => ({
-  id: `item-${i}`,
-  name: i % 2 === 0 ? "Scavenging Guttleslug" : "Dragon Lore (Factory New)",
-  image: `https://community.fastly.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXH5ApeO4YmlhxYQknCRvCo04DEVlxkKgpot621FAR17P7NdTRH-t26q4SZlvD7PYTQgXtu5Mx2gv2PrdSijAWwqkVtN272JIGdJw46YVrYqVO3xLy-gJC9u5vByCBh6ygi7WGdwUKTYdRD8A/360fx360f`,
-  basePrice: 150.20,
-  marketPrice: 180.20,
-  quantity: Math.floor(Math.random() * 20) + 1,
-  inCart: false,
-}));
-
-function FilterDropdown({ options, value, onChange, label }: { 
-  options: FilterOption[],
-  value: string,
-  onChange: (value: string) => void,
-  label: string
+function LoadingModal({ isOpen, steps, onClose }: {
+  isOpen: boolean;
+  steps: LoadingStep[];
+  onClose: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find(opt => opt.value === value);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-[150px] h-10 bg-[#2C3035] rounded-lg px-3 text-white/90 flex items-center justify-between border-2 border-white/20 focus:outline-none hover:border-white/30 transition-colors"
-      >
-        <span className="text-sm">{selected?.label}</span>
-        <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute top-12 left-0 w-[150px] bg-[#2C3035] rounded-xl border-2 border-white/20 shadow-lg z-50">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#3C73DD]/20 transition-colors ${
-                value === option.value ? 'text-white' : 'text-white/50'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ItemCard({ item, currency, onToggleCart }: { 
-  item: InventoryItem, 
-  currency: Currency,
-  onToggleCart: (id: string) => void
-}) {
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
+  useEffect(() => {
+    if (isOpen) {
+      closeButtonRef.current?.focus();
     }
-  };
+  }, [isOpen]);
 
-  const singlePrice = item.marketPrice;
-  const totalPrice = singlePrice * item.quantity;
+  useEffect(() => {
+    if (!isOpen) return;
 
-  const handleCartAction = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onToggleCart(item.id);
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
   };
 
   return (
     <div 
-      className="w-full bg-[#2C3035] rounded-lg overflow-hidden group relative"
-      style={{ boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' }}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10001]"
+      onClick={handleOverlayClick}
     >
-      <div className="relative aspect-[270/178] bg-gradient-to-b from-[#3C3C3C] to-[#2C2C2C]">
-        <img 
-          src={item.image} 
-          alt={item.name}
-          className="w-full h-full object-cover"
-        />
-        <div 
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center"
+      <div className="bg-[#2C3035] rounded-xl p-6 w-[90%] max-w-[500px] relative">
+        <button
+          ref={closeButtonRef}
+          onClick={onClose}
+          className="absolute top-3 right-3 text-white/50 hover:text-[#3C73DD] transition-colors"
         >
-          {item.inCart ? (
-            <div className="flex flex-col items-center gap-3 w-[140px]">
-              <button
-                className="w-full h-10 bg-[#4EC75A] hover:bg-[#5FD86B] transition-colors rounded-lg font-bold text-sm text-white/90 shadow-md flex items-center justify-center gap-2"
-                disabled
-              >
-                <ShoppingCart size={18} />
-                В КОРЗИНЕ
-              </button>
-              <div className="w-full h-[1px] bg-white/20" />
-              <button
-                onClick={handleCartAction}
-                className="w-full h-10 bg-[#FF4A4A] hover:bg-[#FF5C5C] transition-colors rounded-lg font-bold text-sm text-white/90 shadow-md"
-              >
-                УБРАТЬ
-              </button>
+          <X size={20} />
+        </button>
+
+        <h3 className="text-xl font-bold text-white/90 mb-6 text-center">
+          Загружаем ваш инвентарь
+        </h3>
+
+        <div className="flex justify-center mb-6">
+          <Loader2 size={48} className="text-[#3C73DD] animate-spin" />
+        </div>
+
+        <div className="space-y-4 mb-6">
+          {steps.map((step, index) => (
+            <div key={index} className="text-center">
+              <p className={`text-sm ${
+                step.status === 'loading' ? 'text-white' :
+                step.status === 'success' ? 'text-[#3C73DD]' :
+                step.status === 'error' ? 'text-[#FF4A4A]' :
+                'text-white/50'
+              }`}>
+                {step.status === 'error' ? (
+                  <span dangerouslySetInnerHTML={{ 
+                    __html: step.errorMessage?.replace(
+                      'Поддержку',
+                      '<a href="https://t.me/MannCoSupplyCrateKey" target="_blank" rel="noopener" class="text-[#3C73DD] hover:underline">Поддержку</a>'
+                    )?.replace(
+                      'настройках профиля',
+                      '<a href="https://steamcommunity.com/my/edit/settings" target="_blank" rel="noopener" class="text-[#3C73DD] hover:underline">настройках профиля</a>'
+                    ) || ''
+                  }} />
+                ) : step.message}
+              </p>
             </div>
-          ) : (
-            <button
-              onClick={handleCartAction}
-              className="text-sm font-bold text-[#3677AB] uppercase underline hover:text-[#4488CC] transition-colors"
-            >
-              ДОБАВИТЬ
-            </button>
-          )}
+          ))}
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {steps.map((step, index) => (
+            <div
+              key={index}
+              className={`h-2 rounded-full transition-colors duration-300 ${
+                step.status === 'success' ? 'bg-[#3C73DD]' :
+                step.status === 'error' ? 'bg-[#FF4A4A]' :
+                step.status === 'loading' ? 'bg-[#3C73DD] animate-pulse' :
+                'bg-[#555555]'
+              }`}
+            />
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="h-[1px] bg-[#707071]" />
-
-      <div className="p-3">
-        <div 
-          onClick={() => copyToClipboard(item.name)}
-          className="group/name relative flex items-start gap-1.5 mb-2 cursor-pointer"
+function GameSelector({ selectedGame, onSelect }: {
+  selectedGame: number;
+  onSelect: (gameId: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3 mt-4">
+      {games.map((game) => (
+        <button
+          key={game.id}
+          onClick={() => onSelect(game.id)}
+          className={`w-[60px] h-[60px] rounded-lg flex items-center justify-center transition-all duration-200 ${
+            selectedGame === game.id
+              ? 'bg-[#3C73DD]/20 border-2 border-[#3C73DD]'
+              : 'bg-[#2C3035] border-2 border-transparent hover:border-[#3C73DD]/50'
+          }`}
         >
-          <h3 className="text-sm font-medium text-white/95 text-left break-words">
-            {item.name}
-          </h3>
-          <Copy size={14} className="text-white/50 opacity-0 group-hover/name:opacity-100 transition-opacity mt-0.5 shrink-0" />
-        </div>
-        
-        <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
-          <div className="text-white/50">Количество</div>
-          <div className="text-white/50 text-right">Стоимость</div>
-          
-          <div 
-            className="text-white cursor-pointer hover:text-[#4DAEFC] transition-colors whitespace-nowrap"
-            onClick={() => copyToClipboard('1')}
+          <span className="text-sm font-bold text-white/90">{game.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AuthModal({ isOpen, onClose, onLogin }: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  onLogin: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10001]">
+      <div className="bg-[#2C3035] rounded-xl p-6 w-[90%] max-w-[400px] relative">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-white/50 hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+        <h3 className="text-xl font-bold text-white/90 mb-4 text-center">
+          Для просмотра стоимости инвентаря необходимо авторизоваться
+        </h3>
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              onLogin();
+              onClose();
+            }}
+            className="w-[140px] h-[48px] bg-[#3C73DD] hover:bg-[#4d82ec] transition-colors rounded-xl font-bold text-sm text-white/95 shadow-lg"
           >
-            1 шт
-          </div>
-          <div 
-            className="text-[#4DAEFC] cursor-pointer hover:text-[#6DBFFF] transition-colors text-right whitespace-nowrap"
-            onClick={() => copyToClipboard(`${singlePrice.toFixed(2)} ${currency.symbol}`)}
-          >
-            {singlePrice.toFixed(2)}&nbsp;{currency.symbol}
-          </div>
-          
-          <div 
-            className="text-white cursor-pointer hover:text-[#06FF4C] transition-colors whitespace-nowrap"
-            onClick={() => copyToClipboard(item.quantity.toString())}
-          >
-            {item.quantity} шт
-          </div>
-          <div 
-            className="text-[#06FF4C] cursor-pointer hover:text-[#39FF73] transition-colors text-right whitespace-nowrap"
-            onClick={() => copyToClipboard(`${totalPrice.toFixed(2)} ${currency.symbol}`)}
-          >
-            {totalPrice.toFixed(2)}&nbsp;{currency.symbol}
-          </div>
+            Войти
+          </button>
         </div>
       </div>
-
-      {item.inCart && (
-        <div className="absolute top-2 right-2 w-6 h-6 bg-[#4EC75A] rounded-full flex items-center justify-center">
-          <Check size={14} className="text-white" />
-        </div>
-      )}
     </div>
   );
 }
@@ -301,13 +307,154 @@ function App() {
   const [selectedCurrency, setSelectedCurrency] = useState(currencies[0]);
   const [showInventory, setShowInventory] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  
-  const [source, setSource] = useState('steam');
-  const [tradability, setTradability] = useState('all');
-  const [category, setCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('single');
-  
-  const [items, setItems] = useState(sampleItems);
+  const [user, setUser] = useState<User>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [selectedGame, setSelectedGame] = useState(730);
+  const [isLoading, setIsLoading] = useState(false);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [loadingSteps, setLoadingSteps] = useState<LoadingStep[]>([
+    { status: 'pending', message: 'Определяем ваш SteamID' },
+    { status: 'pending', message: 'Отправляем запрос на получение предметов' },
+    { status: 'pending', message: 'Добавляем цены к предметам' },
+    { status: 'pending', message: 'Готово' }
+  ]);
+  const [showLoadingModal, setShowLoadingModal] = useState(false);
+
+  const checkButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    console.log("🔁 Проверка /me...");
+    fetch("https://api.buff-163.ru/me", {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      }
+    })
+    .then(response => {
+      if (response.ok) {
+        return response.json();
+      }
+      throw new Error('Unauthorized');
+    })
+    .then(userData => {
+      if (userData?.steamid) {
+        setUser(userData);
+        setProfileUrl(`https://steamcommunity.com/profiles/${userData.steamid}`);
+      }
+    })
+    .catch(() => {
+      // Silently fail and keep showing login button
+    });
+  }, []);
+
+  const handleLogin = () => {
+    const currentPath = window.location.pathname + window.location.search;
+    window.location.href = `https://api.buff-163.ru/login?next=${encodeURIComponent(currentPath)}`;
+  };
+
+  const handleLogout = () => {
+    window.location.href = 'https://api.buff-163.ru/logout';
+  };
+
+  const handleCloseLoadingModal = () => {
+    setShowLoadingModal(false);
+    setLoadingSteps(steps => steps.map(step => ({ ...step, status: 'pending' })));
+    setIsLoading(false);
+    checkButtonRef.current?.focus();
+  };
+
+  const updateStep = (index: number, status: LoadingStep['status'], errorMessage?: string) => {
+    setLoadingSteps(steps => steps.map((step, i) => {
+      if (i === index) {
+        return { ...step, status, errorMessage };
+      } else if (i > index) {
+        return { ...step, status: 'pending' };
+      }
+      return step;
+    }));
+  };
+
+  const handleInventoryCheck = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    setIsLoading(true);
+    setShowLoadingModal(true);
+    setLoadingSteps(steps => steps.map(step => ({ ...step, status: 'pending' })));
+
+    try {
+      // Step 1: Resolve SteamID
+      updateStep(0, 'loading');
+      const steamidResponse = await fetch(
+        `https://api.buff-163.ru/${selectedGame}/steamid?text=${encodeURIComponent(profileUrl)}`,
+        {
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+          }
+        }
+      );
+
+      if (!steamidResponse.ok) {
+        throw new Error('steamid');
+      }
+
+      const { steamid64 } = await steamidResponse.json();
+      updateStep(0, 'success');
+
+      // Step 2: Fetch Inventory
+      updateStep(1, 'loading');
+      const inventoryResponse = await fetch(
+        `https://api.buff-163.ru/inventory/${steamid64}/${selectedGame}`,
+        {
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+          }
+        }
+      );
+
+      if (!inventoryResponse.ok) {
+        throw new Error('inventory');
+      }
+
+      const inventoryData = await inventoryResponse.json();
+      updateStep(1, 'success');
+
+      // Step 3: Add Prices (simulated)
+      updateStep(2, 'loading');
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      updateStep(2, 'success');
+
+      // Step 4: Complete
+      updateStep(3, 'loading');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      updateStep(3, 'success');
+
+      // Auto-close after success
+      setTimeout(() => {
+        setShowLoadingModal(false);
+        setShowInventory(true);
+      }, 1000);
+
+    } catch (error) {
+      const errorType = (error as Error).message;
+      
+      if (errorType === 'steamid') {
+        updateStep(0, 'error', 'Не удалось определить ссылку на ваш профиль, попробуйте позже, или напишите в Поддержку');
+      } else if (errorType === 'inventory') {
+        updateStep(1, 'error', 'Проверьте, не скрыт ли ваш инвентарь в настройках профиля, если инвентарь открыт и в нем есть предметы, напишите в Поддержку');
+      } else {
+        updateStep(2, 'error', 'Не удалось определить цены. Попробуйте ещё раз или напишите в Поддержку');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const toggleItemInCart = (id: string) => {
     setItems(items.map(item => 
@@ -326,10 +473,33 @@ function App() {
           </h1>
         </div>
         
-        <button className="bg-[#3C73DD] hover:bg-[#4d82ec] transition-colors duration-200 px-4 py-2 rounded-xl font-bold text-sm shadow-md flex items-center gap-2">
-          <Steam size={18} />
-          ВОЙТИ ЧЕРЕЗ STEAM
-        </button>
+        {user ? (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <img 
+                src={user.avatar} 
+                alt={user.name}
+                className="w-8 h-8 rounded-full"
+              />
+              <span className="text-sm font-medium text-white/90">{user.name}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="bg-[#FF4A4A] hover:bg-[#FF5C5C] transition-colors duration-200 px-4 py-2 rounded-xl font-bold text-sm shadow-md flex items-center gap-2"
+            >
+              <LogOut size={18} />
+              ВЫЙТИ
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleLogin}
+            className="bg-[#3C73DD] hover:bg-[#4d82ec] transition-colors duration-200 px-4 py-2 rounded-xl font-bold text-sm shadow-md flex items-center gap-2"
+          >
+            <Steam size={18} />
+            ВОЙТИ ЧЕРЕЗ STEAM
+          </button>
+        )}
       </header>
 
       <div className="hero-banner w-full h-[600px] bg-[#212327] relative overflow-hidden">
@@ -359,22 +529,41 @@ function App() {
             </label>
 
             <div className="flex items-center justify-center gap-3 max-w-[1000px] mx-auto">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={profileUrl}
-                  onChange={(e) => setProfileUrl(e.target.value)}
-                  placeholder="https://steamcommunity.com/profiles/76561198083135565/"
-                  className="w-full h-10 bg-[#313131] border-2 border-[#414141] rounded-lg px-3 text-sm text-white/90 placeholder:text-white/50 focus:outline-none focus:border-[#3C73DD]"
-                />
-                {profileUrl && (
-                  <button
-                    onClick={() => setProfileUrl('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
+              <div className="flex items-center gap-3 flex-1">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={profileUrl}
+                    onChange={(e) => setProfileUrl(e.target.value)}
+                    onFocus={() => !user && setShowAuthModal(true)}
+                    placeholder="https://steamcommunity.com/profiles/76561112345678910/"
+                    className="w-full h-10 bg-[#313131] border-2 border-[#414141] rounded-lg px-3 text-sm text-white/90 placeholder:text-white/50 focus:outline-none focus:border-[#3C73DD]"
+                  />
+                  {profileUrl && (
+                    <button
+                      onClick={() => setProfileUrl('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                <button 
+                  ref={checkButtonRef}
+                  className={`h-10 px-6 bg-[#3C73DD] hover:bg-[#4d82ec] hover:scale-[1.02] transition-all duration-200 rounded-lg font-bold text-sm text-white/95 shadow-lg shadow-[#3C73DD]/20 disabled:opacity-50 disabled:hover:scale-100 disabled:hover:bg-[#3C73DD] flex items-center gap-2`}
+                  onClick={handleInventoryCheck}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/20 border-t-white/90 rounded-full animate-spin"></div>
+                      <span>ЗАГРУЗКА...</span>
+                    </>
+                  ) : (
+                    'УЗНАТЬ СТОИМОСТЬ'
+                  )}
+                </button>
               </div>
 
               <div className="relative">
@@ -407,127 +596,10 @@ function App() {
               </div>
             </div>
 
-            <div className="flex justify-center mt-6">
-              <button 
-                className="w-[200px] h-[48px] bg-[#3C73DD] hover:bg-[#4d82ec] hover:scale-[1.02] transition-all duration-200 rounded-xl font-bold text-sm text-white/95 shadow-lg shadow-[#3C73DD]/20"
-                onClick={() => setShowInventory(true)}
-              >
-                УЗНАТЬ СТОИМОСТЬ
-              </button>
-            </div>
-
-            {showInventory && (
-              <div className="w-full mt-8">
-                <div className="w-full bg-[#2C3035] rounded-xl shadow-lg p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 w-full sm:w-auto">
-                    <div className="w-[100px] h-[100px] rounded-lg overflow-hidden bg-[#1E2128] shrink-0">
-                      <img 
-                        src="https://avatars.fastly.steamstatic.com/fa31773ad3befce64be98fc74a8371ffa53069ec_full.jpg" 
-                        alt="User Avatar"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white/95 mb-2">
-                        Obivan Kenobi
-                      </h2>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-base font-medium text-white/50">
-                          Стоимость инвентаря по CS:GO:
-                        </span>
-                        <span className="text-2xl font-semibold text-[#4DAEFC] whitespace-nowrap">
-                          54645 {selectedCurrency.symbol}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-start sm:items-end gap-3 w-full sm:w-auto">
-                    <span className="text-base font-medium text-white/70">
-                      Скачать стоимость инвентаря в txt формате:
-                    </span>
-                    <button className="w-full sm:w-[140px] h-[40px] bg-[#3C73DD] hover:bg-[#4d82ec] transition-colors duration-200 rounded-xl font-bold text-sm text-white/95 shadow-md flex items-center justify-center gap-2">
-                      <Download size={16} />
-                      СКАЧАТЬ
-                    </button>
-                  </div>
-                </div>
-
-                <div className="w-full mt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-base text-white/90">
-                      Всего в инвентаре по CS:GO найдено 1090 скинов (500 платные):
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:flex items-center gap-4 mb-6 flex-wrap">
-                    <FilterDropdown
-                      options={sourceOptions}
-                      value={source}
-                      onChange={setSource}
-                      label="Source"
-                    />
-                    <FilterDropdown
-                      options={tradabilityOptions}
-                      value={tradability}
-                      onChange={setTradability}
-                      label="Tradability"
-                    />
-                    <FilterDropdown
-                      options={categoryOptions}
-                      value={category}
-                      onChange={setCategory}
-                      label="Category"
-                    />
-                    <FilterDropdown
-                      options={viewModeOptions}
-                      value={viewMode}
-                      onChange={setViewMode}
-                      label="View Mode"
-                    />
-
-                    <div className="col-span-2 sm:ml-auto flex items-center gap-6">
-                      <button className="uppercase text-sm font-medium text-white/50 flex items-center gap-1">
-                        Кол-во
-                        <ArrowUpDown size={14} />
-                      </button>
-                      <button className="uppercase text-sm font-medium text-white/50 flex items-center gap-1">
-                        Цена
-                        <ArrowUpDown size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-[#1E2128] rounded-xl p-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-4">
-                      {items.map((item) => (
-                        <ItemCard
-                          key={item.id}
-                          item={item}
-                          currency={selectedCurrency}
-                          onToggleCart={toggleItemInCart}
-                        />
-                      ))}
-                    </div>
-
-                    <div className="flex justify-center items-center gap-2 mt-6">
-                      {[1, 2, 3, '...', 100].map((page, index) => (
-                        <button
-                          key={index}
-                          className={`w-8 h-8 flex items-center justify-center rounded-lg ${
-                            page === 1 
-                              ? 'bg-[#3C73DD] text-white' 
-                              : 'text-white/50 hover:text-white hover:bg-[#2C3035]'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <GameSelector
+              selectedGame={selectedGame}
+              onSelect={setSelectedGame}
+            />
           </div>
         </div>
       </div>
@@ -545,12 +617,24 @@ function App() {
         )}
       </button>
 
+      <LoadingModal
+        isOpen={showLoadingModal}
+        steps={loadingSteps}
+        onClose={handleCloseLoadingModal}
+      />
+
       <CartSidebar
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         items={items}
         currency={selectedCurrency}
         onRemoveItem={toggleItemInCart}
+      />
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onLogin={handleLogin}
       />
     </main>
   );
